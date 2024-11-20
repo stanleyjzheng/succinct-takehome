@@ -4,5 +4,7 @@ resolver = "2"
 
 [workspace.dependencies]
 alloy-sol-types = "0.8.12"
-sp1-sdk = "3.0.0"
+sp1-sdk = "=3.0.0"
 sp1-lib = "=3.0.0"
+sp1-zkvm = "=3.0.0"
+sp1-primitives = "=3.0.0"

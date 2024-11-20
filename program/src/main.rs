@@ -42,14 +42,13 @@ pub fn main() {
 
     assert_eq!(vkeys.len(), public_values.len());
     for i in 0..vkeys.len() {
-        println!("working2");
         let vkey = &vkeys[i];
         // Verify the proofs.
         let public_values = &public_values[i];
         let public_values_digest = Sha256::digest(public_values);
+        println!("gets here");
         sp1_zkvm::lib::verify::verify_sp1_proof(vkey, &public_values_digest.into());
-
-        println!("working");
+        println!("doesn't get here");
 
         // ABI encode the (vkey, committed_value) pair and add it to the merkle tree
         let root = PublicValuesStruct {

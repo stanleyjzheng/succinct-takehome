@@ -10,17 +10,29 @@
 //! RUST_LOG=info cargo run --release -- --prove
 //! ```
 
+use alloy_primitives::Bytes;
 use anyhow::anyhow;
 use clap::Parser;
 use dotenv::dotenv;
 use futures::future::try_join_all;
+use serde::{Deserialize, Serialize};
 use sp1_sdk::network::client::NetworkClient;
 use sp1_sdk::{include_elf, ProverClient, SP1Proof, SP1ProofWithPublicValues, SP1Stdin};
 use sp1_sdk::{HashableKey, SP1VerifyingKey};
 use std::env;
+use std::path::PathBuf;
 
 /// The ELF (executable and linkable format) file for the Succinct RISC-V zkVM.
 pub const AGGREGATOR_ELF: &[u8] = include_elf!("aggregation-program");
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SP1AggregatedProofFixture {
+    root: Bytes,
+    vkey: String,
+    public_values: String,
+    proof: String,
+}
 
 /// The arguments for the command.
 #[derive(Parser, Debug)]
@@ -56,16 +68,16 @@ pub async fn get_proofs() -> anyhow::Result<Vec<SP1ProofWithPublicValues>> {
     //     .collect::<Vec<_>>();
     let compressed_proof_ids = vec![
         "proofrequest_01jd3kpjybf5ja4pnsyjbcbjpr".to_string(),
-        "proofrequest_01jd3kp583ez2aeehj08vr966a".to_string(),
-        "proofrequest_01jd3kp62cez28fjx7vdhfj4wj".to_string(),
-        "proofrequest_01jd3kp6rmez292mz1r0adbzj8".to_string(),
-        "proofrequest_01jd3kp7qeez2bwh8hj2jr635t".to_string(),
-        "proofrequest_01jd3kp8j5ez2atv2bpfz5kx99".to_string(),
-        "proofrequest_01jd3kp9kfez29vww73shd16vz".to_string(),
-        "proofrequest_01jd3kpac7ez2ak48vx74qxtng".to_string(),
-        "proofrequest_01jd3kpb1jez29kjn12n3av4cc".to_string(),
-        "proofrequest_01jd3kpd4dez2aq8veycnt18z2".to_string(),
-        "proofrequest_01jd3kpdgxez29wdw3vebkact9".to_string(),
+        // "proofrequest_01jd3kp583ez2aeehj08vr966a".to_string(),
+        // "proofrequest_01jd3kp62cez28fjx7vdhfj4wj".to_string(),
+        // "proofrequest_01jd3kp6rmez292mz1r0adbzj8".to_string(),
+        // "proofrequest_01jd3kp7qeez2bwh8hj2jr635t".to_string(),
+        // "proofrequest_01jd3kp8j5ez2atv2bpfz5kx99".to_string(),
+        // "proofrequest_01jd3kp9kfez29vww73shd16vz".to_string(),
+        // "proofrequest_01jd3kpac7ez2ak48vx74qxtng".to_string(),
+        // "proofrequest_01jd3kpb1jez29kjn12n3av4cc".to_string(),
+        // "proofrequest_01jd3kpd4dez2aq8veycnt18z2".to_string(),
+        // "proofrequest_01jd3kpdgxez29wdw3vebkact9".to_string(),
     ];
 
     let proof_futures = compressed_proof_ids
@@ -87,7 +99,6 @@ fn get_compressed_proof_vkey(proof: &SP1ProofWithPublicValues) -> SP1VerifyingKe
     else {
         unimplemented!("Only compressed proofs are supported")
     };
-    println!("{:x?}", proof.vk.hash_u32());
 
     SP1VerifyingKey {
         vk: proof.vk.clone(),
@@ -96,7 +107,7 @@ fn get_compressed_proof_vkey(proof: &SP1ProofWithPublicValues) -> SP1VerifyingKe
 
 #[tokio::main]
 async fn main() {
-    let proofs = get_proofs().await.unwrap();
+    const FIBONACCI_ELF: &[u8] = include_elf!("fibonacci-program");
 
     // Setup the logger.
     sp1_sdk::utils::setup_logger();
@@ -111,7 +122,43 @@ async fn main() {
 
     // Setup the prover client.
     let client = ProverClient::new();
-    let (aggregation_pk, _) = client.setup(AGGREGATOR_ELF);
+    let (aggregation_pk, aggregation_vk) = client.setup(AGGREGATOR_ELF);
+
+    // ----------------------------------------------------------
+    // let proofs = get_proofs().await.unwrap();
+    // ----------------------------------------------------------
+    let (fibonacci_pk, fibonacci_vk) = client.setup(FIBONACCI_ELF);
+
+    let proof_1 = tracing::info_span!("generate fibonacci proof n=10").in_scope(|| {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(&10);
+        client
+            .prove(&fibonacci_pk, stdin)
+            .compressed()
+            .run()
+            .expect("proving failed")
+    });
+    let proof_2 = tracing::info_span!("generate fibonacci proof n=20").in_scope(|| {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(&20);
+        client
+            .prove(&fibonacci_pk, stdin)
+            .compressed()
+            .run()
+            .expect("proving failed")
+    });
+    let proof_3 = tracing::info_span!("generate fibonacci proof n=30").in_scope(|| {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(&30);
+        client
+            .prove(&fibonacci_pk, stdin)
+            .compressed()
+            .run()
+            .expect("proving failed")
+    });
+    let proofs = vec![proof_1, proof_2, proof_3];
+
+    // ----------------------------------------------------------
 
     if args.execute {
         // Aggregate the proofs.
@@ -121,7 +168,8 @@ async fn main() {
             // Write the verification keys.
             let vkeys = proofs
                 .iter()
-                .map(|proof| get_compressed_proof_vkey(proof).hash_u32())
+                // .map(|proof| get_compressed_proof_vkey(proof).hash_u32())
+                .map(|_| fibonacci_vk.hash_u32())
                 .collect::<Vec<_>>();
             stdin.write::<Vec<[u32; 8]>>(&vkeys);
 
@@ -140,15 +188,18 @@ async fn main() {
                 let SP1Proof::Compressed(reduced_proof) = proof.proof.clone() else {
                     panic!()
                 };
-                stdin.write_proof(*reduced_proof, get_compressed_proof_vkey(proof).vk);
+                // stdin.write_proof(*reduced_proof, get_compressed_proof_vkey(proof).vk);
+                stdin.write_proof(*reduced_proof, fibonacci_vk.vk.clone())
             }
 
             // Generate the plonk bn254 proof.
-            client
+            let proof = client
                 .prove(&aggregation_pk, stdin)
                 .plonk()
                 .run()
                 .expect("proving failed");
+
+            create_proof_fixture(proof, &aggregation_vk);
         });
     } else {
         // // Setup the program for proving.
@@ -166,4 +217,42 @@ async fn main() {
         // client.verify(&proof, &vk).expect("failed to verify proof");
         println!("Successfully verified proof!");
     }
+}
+
+fn create_proof_fixture(proof: SP1ProofWithPublicValues, vk: &SP1VerifyingKey) {
+    // Deserialize the public values.
+    let bytes = Bytes::copy_from_slice(proof.public_values.as_slice());
+
+    // Create the testing fixture so we can test things end-to-end.
+    let fixture = SP1AggregatedProofFixture {
+        root: bytes.clone(),
+        vkey: vk.bytes32().to_string(),
+        public_values: format!("0x{:?}", bytes),
+        proof: format!("0x{}", hex::encode(proof.bytes())),
+    };
+
+    // The verification key is used to verify that the proof corresponds to the execution of the
+    // program on the given input.
+    //
+    // Note that the verification key stays the same regardless of the input.
+    println!("Verification Key: {}", fixture.vkey);
+
+    // The public values are the values which are publicly committed to by the zkVM.
+    //
+    // If you need to expose the inputs or outputs of your program, you should commit them in
+    // the public values.
+    println!("Public Values: {}", fixture.public_values);
+
+    // The proof proves to the verifier that the program was executed with some inputs that led to
+    // the give public values.
+    println!("Proof Bytes: {}", fixture.proof);
+
+    // Save the fixture to a file.
+    let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../contracts/src/fixtures");
+    std::fs::create_dir_all(&fixture_path).expect("failed to create fixture path");
+    std::fs::write(
+        fixture_path.join("plonk-fixture.json".to_lowercase()),
+        serde_json::to_string_pretty(&fixture).unwrap(),
+    )
+    .expect("failed to write fixture");
 }

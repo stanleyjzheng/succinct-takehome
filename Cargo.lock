@@ -57,6 +57,8 @@ dependencies = [
  "alloy-primitives 0.8.12",
  "alloy-sol-types 0.8.12",
  "sha2",
+ "sp1-lib",
+ "sp1-primitives",
  "sp1-zkvm",
  "tiny-keccak",
 ]
@@ -65,6 +67,7 @@ dependencies = [
 name = "aggregation-script"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives 0.8.12",
  "alloy-sol-types 0.8.12",
  "anyhow",
  "clap",
@@ -5205,9 +5208,9 @@ dependencies = [
 
 [[package]]
 name = "sp1-lib"
-version = "3.3.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa1fe3d3e2a4cfe6b7259f0c00f770a4376fba892af20695b6ba450e0d02771c"
+checksum = "9c372b16988e765af85ccf958b18b26d89c05886f2592d313a285415dcc769cb"
 dependencies = [
  "bincode",
  "serde",
@@ -5215,9 +5218,9 @@ dependencies = [
 
 [[package]]
 name = "sp1-primitives"
-version = "3.3.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3442b59d2606ed4517c09b5daaa39e0e0d0ef75fb8e75b6f50334fd87a966b42"
+checksum = "025f06b633588e246308ad5f67b32f0f7d1cbeab38f7a842314699270bc706f5"
 dependencies = [
  "bincode",
  "hex",
@@ -5480,9 +5483,9 @@ dependencies = [
 
 [[package]]
 name = "sp1-zkvm"
-version = "3.3.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7123d0e616c6641a9088c604f5d00f728f396823e8a91ef805d54d6e1d8ccc1b"
+checksum = "ce08dc324dade0709260b01c76c8eeb665f2ef7c652c2002e2edf5a492ded7f1"
 dependencies = [
  "cfg-if",
  "getrandom",
