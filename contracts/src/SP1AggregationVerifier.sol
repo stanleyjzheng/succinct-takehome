@@ -42,6 +42,10 @@ contract SP1AggregationVerifier {
         verifiedMerkleRoots[merkleRoot] = true;
     }
 
+    function getLeafHash (bytes32 _programVKey, bytes calldata _publicValues) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(_programVKey, _publicValues));
+    }
+
     /// @notice Verifies an individual Fibonacci proof against the aggregated Merkle root.
     /// @param _programVKey The verification key for the individual proof.
     /// @param _publicValues The public inputs to the individual SP1 proof.
@@ -52,16 +56,14 @@ contract SP1AggregationVerifier {
         bytes calldata _publicValues,
         bytes32 merkleRoot,
         bytes32[] memory proof
-    ) public view {
+    ) public view returns (bool) {
         require(verifiedMerkleRoots[merkleRoot], "Merkle root not verified");
 
-        // Compute the leaf hash
-        bytes32 leafHash = keccak256(
-            abi.encodePacked(_programVKey, _publicValues)
-        );
+        bytes32 leafHash = getLeafHash(_programVKey, _publicValues);
 
         // Verify the Merkle proof using OpenZeppelin's MerkleProof library
         bool isValid = MerkleProof.verify(proof, merkleRoot, leafHash);
         require(isValid, "Invalid Merkle proof");
+        return isValid;
     }
 }

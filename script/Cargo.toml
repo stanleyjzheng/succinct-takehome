@@ -8,13 +8,9 @@ default-run = "aggregation"
 name = "aggregation"
 path = "src/bin/main.rs"
 
-[[bin]]
-name = "evm"
-path = "src/bin/evm.rs"
-
 [dependencies]
-sp1-sdk = "3.0.0"
-alloy-primitives = "0.8.12"
+sp1-sdk.workspace = true
+alloy-primitives.workspace = true
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.200", default-features = false, features = ["derive"] }
 clap = { version = "4.0", features = ["derive", "env"] }
@@ -25,6 +21,7 @@ tokio = { version = "1.0", features = ["full"] }
 dotenv = "0.15.0"
 futures = "0.3"
 anyhow = "1.0.40"
+aggregation-lib = { path = "../lib" }
 
 [build-dependencies]
 sp1-helper = "3.0.0"

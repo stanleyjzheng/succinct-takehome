@@ -1,10 +1,12 @@
 [workspace]
-members = ["program", "script"]
+members = ["program", "script", "lib"]
 resolver = "2"
 
 [workspace.dependencies]
 alloy-sol-types = "0.8.12"
 sp1-sdk = "=3.0.0"
 sp1-lib = "=3.0.0"
-sp1-zkvm = "=3.0.0"
+sp1-zkvm = { version = "=3.0.0", features = ["verify"] }
+alloy-primitives = { version = "0.8.12", features = ["serde"] }
 sp1-primitives = "=3.0.0"
+alloy-dyn-abi = "0.8.12"

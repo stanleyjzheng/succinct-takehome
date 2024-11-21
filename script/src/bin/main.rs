@@ -10,7 +10,9 @@
 //! RUST_LOG=info cargo run --release -- --prove
 //! ```
 
+use aggregation_lib::{build_tree, get_merkle_proof_for_value, words_to_bytes_le};
 use alloy_primitives::Bytes;
+use alloy_primitives::B256;
 use anyhow::anyhow;
 use clap::Parser;
 use dotenv::dotenv;
@@ -91,20 +93,6 @@ pub async fn get_proofs() -> anyhow::Result<Vec<SP1ProofWithPublicValues>> {
         .collect::<anyhow::Result<Vec<_>>>()
 }
 
-fn get_compressed_proof_vkey(proof: &SP1ProofWithPublicValues) -> SP1VerifyingKey {
-    let SP1ProofWithPublicValues {
-        proof: SP1Proof::Compressed(proof),
-        ..
-    } = proof
-    else {
-        unimplemented!("Only compressed proofs are supported")
-    };
-
-    SP1VerifyingKey {
-        vk: proof.vk.clone(),
-    }
-}
-
 #[tokio::main]
 async fn main() {
     const FIBONACCI_ELF: &[u8] = include_elf!("fibonacci-program");
@@ -158,65 +146,61 @@ async fn main() {
     });
     let proofs = vec![proof_1, proof_2, proof_3];
 
-    // ----------------------------------------------------------
+    // Aggregate the proofs.
+    tracing::info_span!("aggregate the proofs").in_scope(|| {
+        let mut stdin = SP1Stdin::new();
 
-    if args.execute {
-        // Aggregate the proofs.
-        tracing::info_span!("aggregate the proofs").in_scope(|| {
-            let mut stdin = SP1Stdin::new();
+        // Write the verification keys.
+        let vkeys = proofs
+            .iter()
+            // .map(|proof| get_compressed_proof_vkey(proof).hash_u32())
+            .map(|_| fibonacci_vk.hash_u32())
+            .collect::<Vec<_>>();
+        stdin.write::<Vec<[u32; 8]>>(&vkeys);
 
-            // Write the verification keys.
-            let vkeys = proofs
-                .iter()
-                // .map(|proof| get_compressed_proof_vkey(proof).hash_u32())
-                .map(|_| fibonacci_vk.hash_u32())
-                .collect::<Vec<_>>();
-            stdin.write::<Vec<[u32; 8]>>(&vkeys);
+        // Write the public values.
+        let public_values = proofs
+            .iter()
+            .map(|proof| proof.public_values.to_vec())
+            .collect::<Vec<_>>();
+        stdin.write::<Vec<Vec<u8>>>(&public_values);
 
-            // Write the public values.
-            let public_values = proofs
-                .iter()
-                .map(|proof| proof.public_values.to_vec())
-                .collect::<Vec<_>>();
-            stdin.write::<Vec<Vec<u8>>>(&public_values);
+        let tree = build_tree(&vkeys, &public_values);
 
-            // Write the proofs.
-            //
-            // Note: this data will not actually be read by the aggregation program, instead it will be
-            // witnessed by the prover during the recursive aggregation process inside SP1 itself.
-            for proof in &proofs {
-                let SP1Proof::Compressed(reduced_proof) = proof.proof.clone() else {
-                    panic!()
-                };
-                // stdin.write_proof(*reduced_proof, get_compressed_proof_vkey(proof).vk);
-                stdin.write_proof(*reduced_proof, fibonacci_vk.vk.clone())
-            }
+        assert_eq!(vkeys.len(), public_values.len());
+        for i in 0..vkeys.len() {
+            let merkle_proof = get_merkle_proof_for_value(&vkeys[i], &public_values[i], &tree);
 
-            // Generate the plonk bn254 proof.
-            let proof = client
-                .prove(&aggregation_pk, stdin)
-                .plonk()
-                .run()
-                .expect("proving failed");
+            println!(
+                "Fibonacci vkey: {}, public_values: 0x{}, proof: {:?}, leaf: {:?}",
+                B256::from_slice(&words_to_bytes_le(&vkeys[i])),
+                hex::encode(public_values[i].clone()),
+                merkle_proof.clone().map(|proof| proof.siblings),
+                merkle_proof.map(|proof| proof.leaf)
+            )
+        }
 
-            create_proof_fixture(proof, &aggregation_vk);
-        });
-    } else {
-        // // Setup the program for proving.
-        // let (pk, vk) = client.setup(FIBONACCI_ELF);
+        // Write the proofs.
+        //
+        // Note: this data will not actually be read by the aggregation program, instead it will be
+        // witnessed by the prover during the recursive aggregation process inside SP1 itself.
+        for proof in &proofs {
+            let SP1Proof::Compressed(reduced_proof) = proof.proof.clone() else {
+                panic!()
+            };
+            // stdin.write_proof(*reduced_proof, get_compressed_proof_vkey(proof).vk);
+            stdin.write_proof(*reduced_proof, fibonacci_vk.vk.clone())
+        }
 
-        // // Generate the proof
-        // let proof = client
-        //     .prove(&pk, stdin)
-        //     .run()
-        //     .expect("failed to generate proof");
+        // Generate the plonk bn254 proof.
+        let proof = client
+            .prove(&aggregation_pk, stdin)
+            .plonk()
+            .run()
+            .expect("proving failed");
 
-        // println!("Successfully generated proof!");
-
-        // // Verify the proof.
-        // client.verify(&proof, &vk).expect("failed to verify proof");
-        println!("Successfully verified proof!");
-    }
+        create_proof_fixture(proof, &aggregation_vk);
+    });
 }
 
 fn create_proof_fixture(proof: SP1ProofWithPublicValues, vk: &SP1VerifyingKey) {
@@ -227,7 +211,7 @@ fn create_proof_fixture(proof: SP1ProofWithPublicValues, vk: &SP1VerifyingKey) {
     let fixture = SP1AggregatedProofFixture {
         root: bytes.clone(),
         vkey: vk.bytes32().to_string(),
-        public_values: format!("0x{:?}", bytes),
+        public_values: format!("{:?}", bytes),
         proof: format!("0x{}", hex::encode(proof.bytes())),
     };
 
@@ -251,7 +235,7 @@ fn create_proof_fixture(proof: SP1ProofWithPublicValues, vk: &SP1VerifyingKey) {
     let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../contracts/src/fixtures");
     std::fs::create_dir_all(&fixture_path).expect("failed to create fixture path");
     std::fs::write(
-        fixture_path.join("plonk-fixture.json".to_lowercase()),
+        fixture_path.join(format!("plonk-fixture-{}.json", fixture.public_values).to_lowercase()),
         serde_json::to_string_pretty(&fixture).unwrap(),
     )
     .expect("failed to write fixture");

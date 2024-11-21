@@ -1,0 +1,10 @@
+[package]
+name = "aggregation-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alloy-sol-types = { workspace = true }
+tiny-keccak = "2.0.2"
+alloy-primitives.workspace = true
+alloy-dyn-abi.workspace = true
