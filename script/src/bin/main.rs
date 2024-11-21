@@ -215,6 +215,9 @@ fn create_proof_fixture(proof: SP1ProofWithPublicValues, vk: &SP1VerifyingKey) {
         proof: format!("0x{}", hex::encode(proof.bytes())),
     };
 
+    println!("\n--------------------------------------------------------------------------------------\n");
+    println!("Aggregation proof:");
+
     // The verification key is used to verify that the proof corresponds to the execution of the
     // program on the given input.
     //
